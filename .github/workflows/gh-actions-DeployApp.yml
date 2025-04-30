@@ -73,7 +73,7 @@ jobs:
     - uses: azure/appservice-settings@v1
       with:
         app-name: 'juiceshop-prod-devsecops-${{ secrets.LABINSTANCEID }} '
-        general-settings-json: '{"linuxFxVersion": "DOCKER|acrdevsecops${{ secrets.CONTAINERREGISTRY }}.azurecr.io/devsecops:${{ github.run_id }}"}' 
+        general-settings-json: '{"linuxFxVersion": "DOCKER|acrdevsecops${{ secrets.LABINSTANCEID }}.azurecr.io/devsecops:${{ github.run_id }}"}' 
 
     - uses: Azure/cli@v1.0.0
       with:
