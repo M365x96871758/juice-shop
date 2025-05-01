@@ -1,0 +1,65 @@
+trigger:
+- master
+
+pool:
+  name: 'Default'
+
+variables:
+- group: DevSecOps-Variables
+- group: DevSecOps-KeyVault
+
+stages:
+- stage: Build  
+  displayName: Build and generate bom.xml  
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      name: 'Default' 
+    steps:
+      - bash: |
+            npm install --global @cyclonedx/cyclonedx-npm
+            npm i -g typescript ts-node
+            npm install --production --unsafe-perm
+            npm dedupe
+        displayName: 'Run a multi-line script'
+        
+      - bash: |
+            npm install -g @cyclonedx/cyclonedx-npm@latest
+            npm run sbom
+        displayName: 'Create BOM'
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: '$(Build.SourcesDirectory)/bom.xml'
+          ArtifactName: 'drop'
+          publishLocation: 'Container'
+
+- stage: Publish  
+  displayName: Publish the bom.xml DTracker  
+  jobs:
+  - job: Publish
+    displayName: Publish
+    pool:
+      name: 'Default'
+    steps:
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      
+    - task: upload-bom-dtrack-task@1
+      displayName: 'Upload BOM to Dependency-Track'
+      continueOnError: true
+      inputs:
+        dtrackProjId: '$(dtrackProjId)'
+        bomFilePath: '$(System.ArtifactsDirectory)/drop/bom.xml'
+        dtrackAPIKey: '$(dtrackAPIKey)'
+        dtrackURI: 'https://dependency-track-devsecops-$(LabInstanceID).azurewebsites.net'
+        thresholdAction: 'warn'
+        thresholdCritical: '0'
+        thresholdHigh: '0'
+        thresholdMedium: '0'
+        thresholdLow: '0'

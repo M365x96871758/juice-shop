@@ -1,0 +1,118 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool:
+  name: 'Default'
+
+variables:
+- group: DevSecOps-Variables
+
+steps:
+
+- task: bash@3
+  displayName : 'Run ZAP'
+  continueOnError: true
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo "#### Get the latest ZAP docker image ####"
+      echo "############################################"
+
+      docker pull softwaresecurityproject/zap-stable:latest
+
+      echo "##### Set up some stuff #######"
+      echo "###############################"
+      /usr/bin/id -u root 
+      /usr/bin/mkdir -v -p $BUILD_SOURCESDIRECTORY/zap
+      /usr/bin/chmod 777 $BUILD_SOURCESDIRECTORY/zap
+
+      echo "Check whats in the dir tree"
+      echo "###############################"
+
+      pwd
+      ls -ahl /home/vsts/work/1/s
+
+
+      echo "####### RUN The SCAN #######"
+      /usr/bin/docker --debug run -u 0 -v $BUILD_SOURCESDIRECTORY/zap:/zap/wrk/:rw softwaresecurityproject/zap-stable zap-full-scan.py -t https://$(DevAppName).azurewebsites.net:443 -J report.json -r report.html
+
+- task: CopyFiles@2
+  condition: always()
+  inputs:
+    SourceFolder: '$(Build.SourcesDirectory)/zap/'
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+- task: PublishBuildArtifacts@1
+  condition: always()
+  inputs:
+    ArtifactName: 'owasp_zap_reports'
+
+- bash: |
+   sudo npm install -g handlebars-cmd
+
+   cat <<EOF > zap/nunit-template.hbs
+
+   <test-run
+       id="2"
+       name="Owasp test"
+       start-time="{{@generated}}">
+       {{#each site}}<test-suite
+           id="{{@index}}"
+           type="Assembly"
+           name="{{[@name]}}"
+           result="Failed"
+           failed="{{alerts.length}}">
+           <attachments>
+               <attachment>
+                   <filePath>$BUILD_SOURCESDIRECTORY/zap/report.html</filePath>
+               </attachment>
+           </attachments>
+           {{#each alerts}}<test-case
+               id="{{@index}}"
+               name="{{alert}}"
+               result="Failed"
+               fullname="{{alert}}"
+               time="1">
+               <failure>
+                   <message>
+                       <![CDATA[{{{desc}}}]]>
+                   </message>
+                   <stack-trace>
+                       <![CDATA[
+   Solution:
+   {{{solution}}}
+
+   Reference:
+   {{{reference}}}
+
+   instances:{{#each instances}}
+   * {{uri}}
+       - {{method}}
+       {{#if evidence}}- {{{evidence}}}{{/if}}
+                       {{/each}}]]>
+                   </stack-trace>
+               </failure>
+           </test-case>
+           {{/each}}
+       </test-suite>
+       {{/each}}
+   </test-run>
+   EOF
+  displayName: 'owasp nunit template'
+  condition: always()
+
+- bash: ' handlebars zap/report.json < zap/nunit-template.hbs > zap/test-results.xml'
+  displayName: 'generate nunit type file'
+  condition: always()
+
+- task: PublishTestResults@2
+  displayName: 'Publish Test Results **/TEST-*.xml'
+  inputs:
+    testResultsFormat: NUnit
+    testResultsFiles: 'zap/test-results.xml'
+  condition: always()

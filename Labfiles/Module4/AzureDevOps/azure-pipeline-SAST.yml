@@ -1,0 +1,41 @@
+# Docker.
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+stages:
+- stage: SAST
+  displayName:  Static Analysis Security test
+  jobs:
+  - job: SAST
+    displayName:  Static Analysis Security test
+    pool:
+      name: 'Default'
+    steps:
+
+    #Module-4 - Exercise 2
+    - task: SonarQubePrepare@6
+      inputs:
+        SonarQube: 'Sonar'
+        scannerMode: 'CLI'
+        configMode: 'manual'
+        cliProjectKey: 'DevSecOps'
+        cliProjectName: 'DevSecOps'
+        cliSources: '.'
+
+    #Module-4 - Exercise 2
+    - task: SonarQubeAnalyze@6
+      displayName: 'Run Code Analysis'    
+      inputs:
+        jdkversion: 'JAVA_HOME_17_X64'
+
+    #Module-4 - Exercise 2
+    - task: SonarQubePublish@6
+      displayName: 'Publish Quality Gate Result'
+      inputs:
+        pollingTimeoutSec: '300'
